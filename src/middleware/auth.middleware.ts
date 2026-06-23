@@ -9,8 +9,6 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // jwks client is created inside the function — NOT at module level.
-// This is critical because at module load time dotenv hasn't run yet,
-// so process.env.COGNITO_REGION would be undefined and the JWKS URI would be wrong.
 function getSigningKey(header: jwt.JwtHeader, callback: jwt.SigningKeyCallback) {
   const jwksUri = `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`;
 
@@ -46,8 +44,6 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
     getSigningKey,
     {
       algorithms: ['RS256'],
-      // audience check removed — Cognito tokens with a client secret use
-      // client_id claim instead of aud, which causes verification to fail
       issuer,
     },
     (err, decoded) => {

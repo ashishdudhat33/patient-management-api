@@ -1,4 +1,4 @@
-// Core patient entity — matches what we store in DynamoDB
+// Core patient entity
 export interface Patient {
   patientId: string;       // UUID — partition key in Dynamo
   name: string;
@@ -17,7 +17,6 @@ export interface Address {
   country: string;
 }
 
-// What the client sends when creating a patient — no ID yet, timestamps handled by us
 export interface CreatePatientDTO {
   name: string;
   address: Address;
@@ -25,7 +24,6 @@ export interface CreatePatientDTO {
   allergies: string[];
 }
 
-// All fields optional for partial updates
 export interface UpdatePatientDTO {
   name?: string;
   address?: Partial<Address>;
@@ -33,13 +31,11 @@ export interface UpdatePatientDTO {
   allergies?: string[];
 }
 
-// Shape of a search/query result list
 export interface PatientListResponse {
   patients: Patient[];
   count: number;
 }
 
-// Generic API response wrapper — keeps responses consistent across all endpoints
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;

@@ -96,7 +96,6 @@ export const patientController = {
   },
 
   // GET /patients/query/by-condition?condition=Diabetes
-  // Hits DynamoDB (scan fallback — for small datasets or when OpenSearch is down)
   async findByConditionDynamo(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const condition = req.query.condition as string;
@@ -107,7 +106,7 @@ export const patientController = {
     }
   },
 
-  // GET /patients/search?condition=Diabetes  — hits OpenSearch for fast full-text search
+  // GET /patients/search?condition=Diabetes
   async searchByCondition(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const condition = req.query.condition as string;

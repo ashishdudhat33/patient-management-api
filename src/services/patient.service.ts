@@ -30,7 +30,6 @@ export const patientService = {
       new PutCommand({
         TableName: TABLE,
         Item: patient,
-        // Prevent accidentally overwriting an existing record with the same UUID (extremely unlikely but safe)
         ConditionExpression: 'attribute_not_exists(patientId)',
       })
     );
@@ -55,7 +54,6 @@ export const patientService = {
   // ─── Update ────────────────────────────────────────────────────────────────
 
   async update(patientId: string, dto: UpdatePatientDTO): Promise<Patient | null> {
-    // Build a dynamic UpdateExpression from whatever fields were passed
     const expressionParts: string[] = [];
     const attrNames: Record<string, string> = {};
     const attrValues: Record<string, unknown> = {};
@@ -85,11 +83,9 @@ export const patientService = {
     }
 
     if (expressionParts.length === 0) {
-      // Nothing to update — just return current record
       return this.getById(patientId);
     }
 
-    // Always bump updatedAt
     expressionParts.push('#updatedAt = :updatedAt');
     attrNames['#updatedAt'] = 'updatedAt';
     attrValues[':updatedAt'] = new Date().toISOString();
@@ -126,8 +122,6 @@ export const patientService = {
   },
 
   // ─── Query by city (uses GSI: address.city-index) ─────────────────────────
-  // DynamoDB GSI on address.city allows O(1) lookups instead of full table scans.
-  // The GSI is defined as: PK = addressCity (projected from address.city at write time)
 
   async findByCity(city: string): Promise<Patient[]> {
     const result = await dynamoClient.send(
@@ -145,8 +139,6 @@ export const patientService = {
   // ─── Scan by condition (fallback for DynamoDB — prefer OpenSearch for this) ─
 
   async findByCondition(condition: string): Promise<Patient[]> {
-    // FilterExpression scans the whole table — this is intentionally here as a
-    // fallback. Real production traffic should hit the OpenSearch endpoint instead.
     const result = await dynamoClient.send(
       new ScanCommand({
         TableName: TABLE,

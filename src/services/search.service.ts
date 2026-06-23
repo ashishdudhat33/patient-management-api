@@ -22,7 +22,6 @@ export const searchService = {
               type: 'text',
               analyzer: 'standard',
               fields: {
-                // keyword sub-field lets us do exact-match aggregations too
                 keyword: { type: 'keyword' },
               },
             },
@@ -40,7 +39,7 @@ export const searchService = {
     logger.info(`OpenSearch index "${PATIENTS_INDEX}" created`);
   },
 
-  // Index (or re-index) a single patient document
+  // Index a single patient document
   async indexPatient(patient: Patient): Promise<void> {
     await openSearchClient.index({
       index: PATIENTS_INDEX,
@@ -71,7 +70,6 @@ export const searchService = {
   },
 
   // Full-text search across the conditions field.
-  // Uses a multi_match so partial terms work too (e.g. "diab" matches "Diabetes").
   async searchByCondition(query: string): Promise<Patient[]> {
     const response = await openSearchClient.search({
       index: PATIENTS_INDEX,
@@ -80,7 +78,6 @@ export const searchService = {
           match: {
             conditions: {
               query,
-              // fuzziness lets us catch small typos
               fuzziness: 'AUTO',
             },
           },

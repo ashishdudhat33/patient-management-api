@@ -3,7 +3,6 @@ import { Router, Request, Response } from 'express';
 const router = Router();
 
 // Simple liveness probe — API Gateway and ALB use this to decide if the container is healthy.
-// No auth needed; just confirms the process is alive.
 router.get('/', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
