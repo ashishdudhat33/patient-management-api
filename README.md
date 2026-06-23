@@ -192,4 +192,4 @@ See `docs/DEPLOYMENT_PLAN.md` for the full step-by-step guide covering Lambda, A
 
 ## Postman
 
-Import `docs/PatientAPI.postman_collection.json` into Postman. Set the `baseUrl` and `authToken` collection variables before running.
+Import `docs/Patient Management API.postman_collection.json` into Postman. Set the `baseUrl` and `authToken` collection variables before running.
