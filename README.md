@@ -323,20 +323,6 @@ npm test -- --coverage
 
 All 20 tests pass with coverage across service operations, HTTP routes, validation, 404 handling, and DynamoDB error conditions.
 
----
-
-## Redis Caching Design (Bonus)
-
-Redis caching was not implemented as code but the design is straightforward using AWS ElastiCache.
-
-Cache keys would follow a hierarchical pattern — `patients:city:{cityName}` for address queries and `patients:search:{conditionQuery}` for condition searches. Each key would have a TTL of 5 minutes given that medical data can change frequently.
-
-On every write operation (create, update, delete), the relevant cache keys are invalidated so stale data is never served. The Node.js client would be `ioredis` running inside the same VPC as the Lambda function via ElastiCache.
-
-The main trade-off to consider is that placing Lambda inside a VPC adds roughly 100ms to cold start times. For latency-sensitive paths this can be addressed with provisioned concurrency.
-
----
-
 ## Deploying to Lambda
 
 ### 1. Build and package
