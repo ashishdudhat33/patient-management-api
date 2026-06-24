@@ -54,7 +54,8 @@ src/
 └── lambda.ts                      # AWS Lambda handler
 tests/
 ├── patient.service.test.ts        # unit tests for service layer
-└── patient.routes.test.ts         # route/controller tests
+├── patient.routes.test.ts         # route/controller tests
+└── error.middleware.test.ts       # error handler + 404 tests
 docs/
 └── Patient Management API.postman_collection.json
 ```
@@ -99,7 +100,7 @@ OPENSEARCH_USERNAME=username
 OPENSEARCH_PASSWORD=password
 ```
 
-> Make sure there are no inline comments on the same line as a value — dotenv doesn't support them.
+> Do not add inline comments on the same line as a value — dotenv does not support them and will include the comment as part of the value.
 
 ### 3. Start the server
 
@@ -138,9 +139,9 @@ All responses follow this structure:
 | POST | `/patients` | Yes | Create a new patient |
 | PUT | `/patients/:id` | Yes | Update a patient (partial update) |
 | DELETE | `/patients/:id` | Yes | Delete a patient |
-| GET | `/patients/query/by-address?city=London` | No | Find patients by city |
+| GET | `/patients/query/by-address?city=London` | No | Find patients by city (DynamoDB GSI) |
 | GET | `/patients/query/by-condition?condition=Diabetes` | No | Find by condition (DynamoDB scan) |
-| GET | `/patients/search?condition=Diabetes` | No | Search by condition (OpenSearch) |
+| GET | `/patients/search?condition=Diabetes` | No | Search by condition (OpenSearch fuzzy) |
 
 **Protected routes** require `Authorization: Bearer <Cognito IdToken>` header.
 
@@ -177,25 +178,25 @@ One GSI is needed for the by-address query:
 
 | GSI Name | Partition Key | Purpose |
 |----------|---------------|---------|
-| `addressCity-index` | `addressCity` | Query patients by city |
+| `addressCity-index` | `addressCity` | Query patients by city without scanning the full table |
 
 Billing mode: On-demand (PAY_PER_REQUEST)
 
 ### Cognito
 
 - Create a User Pool
-- Create an App Client with **no client secret** (or with secret — see note below)
+- Create an App Client — with or without a client secret
 - Enable `ALLOW_USER_PASSWORD_AUTH` on the app client
 - Create a test user and set a permanent password
 
-> If your app client has a client secret, you need to include `SECRET_HASH` in every auth request. Calculate it as HMAC-SHA256 of `username + clientId` using the client secret, encoded as Base64.
+> If your app client has a client secret, include `SECRET_HASH` in every auth request. Calculate it as HMAC-SHA256 of `username + clientId` signed with the client secret, encoded as Base64.
 
 ### OpenSearch
 
 - Create a domain named `patient-search`
 - Engine: OpenSearch 2.7
-- Instance: t3.small.search (cheapest option)
-- Enable fine-grained access control or open access policy
+- Instance: t3.small.search
+- Enable fine-grained access control or set an open access policy
 - Copy the domain endpoint URL into your `.env`
 
 ### IAM Permissions
@@ -237,12 +238,56 @@ Your IAM user or Lambda execution role needs:
 
 ---
 
-## Getting a Cognito Token
+## Postman Collection
 
-Send this request in Postman to get an `IdToken`:
+Import `Patient Management API.postman_collection.json` into Postman.
+
+### Environment Variables
+
+The collection uses environment variables so you never have to manually copy tokens. Set up a Postman environment with these variables:
+
+| Variable | Value |
+|----------|-------|
+| `baseUrl` | `http://localhost:3000` or your API Gateway URL |
+| `authToken` | Set automatically by the login request script |
+| `accessToken` | Set automatically by the login request script |
+| `refreshToken` | Set automatically by the login request script |
+
+### Auto Token Script
+
+The **Login (Get Token)** request in the collection has a test script that automatically saves all three tokens to your environment after a successful login. You never need to copy and paste tokens manually.
+
+```javascript
+const response = pm.response.json();
+
+if (response.AuthenticationResult) {
+    pm.environment.set(
+        "authToken",
+        response.AuthenticationResult.IdToken
+    );
+
+    pm.environment.set(
+        "accessToken",
+        response.AuthenticationResult.AccessToken
+    );
+
+    pm.environment.set(
+        "refreshToken",
+        response.AuthenticationResult.RefreshToken
+    );
+
+    console.log("Tokens saved successfully");
+}
+```
+
+Once you run the login request, all subsequent protected requests automatically use the saved `authToken` — no manual steps needed.
+
+### Login Request
+
+The collection includes a pre-configured **Login** request:
 
 ```
-POST https://cognito-idp.{region}.amazonaws.com/
+POST https://cognito-idp.eu-north-1.amazonaws.com/
 
 Headers:
   X-Amz-Target : AWSCognitoIdentityProviderService.InitiateAuth
@@ -251,16 +296,16 @@ Headers:
 Body:
 {
   "AuthFlow": "USER_PASSWORD_AUTH",
-  "ClientId": "your_client_id",
+  "ClientId": "{{clientId}}",
   "AuthParameters": {
-    "USERNAME": "your_email",
-    "PASSWORD": "your_password",
-    "SECRET_HASH": "only_needed_if_client_has_secret"
+    "USERNAME": "{{username}}",
+    "PASSWORD": "{{password}}",
+    "SECRET_HASH": "{{secretHash}}"
   }
 }
 ```
 
-The `IdToken` in the response is your Bearer token. It expires after 1 hour — just resend this request to get a fresh one.
+The `IdToken` expires after 1 hour. When it does, just run the login request again — the script saves a fresh token automatically.
 
 ---
 
@@ -270,11 +315,25 @@ The `IdToken` in the response is your Bearer token. It expires after 1 hour — 
 npm test
 ```
 
-Tests mock all AWS SDK calls so no real infrastructure is needed. A coverage report is generated after each run.
+Tests mock all AWS SDK calls so no real infrastructure is needed. The suite covers the service layer, route/controller layer, and error handling middleware.
 
 ```bash
 npm test -- --coverage
 ```
+
+All 20 tests pass with coverage across service operations, HTTP routes, validation, 404 handling, and DynamoDB error conditions.
+
+---
+
+## Redis Caching Design (Bonus)
+
+Redis caching was not implemented as code but the design is straightforward using AWS ElastiCache.
+
+Cache keys would follow a hierarchical pattern — `patients:city:{cityName}` for address queries and `patients:search:{conditionQuery}` for condition searches. Each key would have a TTL of 5 minutes given that medical data can change frequently.
+
+On every write operation (create, update, delete), the relevant cache keys are invalidated so stale data is never served. The Node.js client would be `ioredis` running inside the same VPC as the Lambda function via ElastiCache.
+
+The main trade-off to consider is that placing Lambda inside a VPC adds roughly 100ms to cold start times. For latency-sensitive paths this can be addressed with provisioned concurrency.
 
 ---
 
@@ -304,18 +363,3 @@ zip -r patient-api.zip dist/ node_modules/ package.json
 - This forwards all requests to Express which handles routing internally
 
 The `src/lambda.ts` file wraps the Express app using `aws-serverless-express` so it works identically in Lambda and locally — no code changes needed between environments.
-
----
-
-## Postman Collection
-
-Import `Patient Management API.postman_collection.json` into Postman.
-
-Set these two collection variables:
-
-| Variable | Value |
-|----------|-------|
-| `baseUrl` | `http://localhost:3000` or your API Gateway URL |
-| `token` | Your Cognito `IdToken` |
-
-All requests are pre-configured with the correct headers, body, and auth.
