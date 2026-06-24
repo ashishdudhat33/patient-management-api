@@ -56,7 +56,7 @@ tests/
 ├── patient.service.test.ts        # unit tests for service layer
 └── patient.routes.test.ts         # route/controller tests
 docs/
-└── PatientAPI.postman_collection.json
+└── Patient Management API.postman_collection.json
 ```
 
 ---
